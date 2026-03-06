@@ -5,7 +5,7 @@ import matplotlib.font_manager as fm
 import pandas as pd
 
 # ==========================================
-# ส่วนที่ 1: Algorithms
+# ส่วนที่ 1: Algorithms 
 # ==========================================
 def binarySearch(arr, left, right, target):
     if right >= left:
@@ -16,7 +16,6 @@ def binarySearch(arr, left, right, target):
             return binarySearch(arr, mid + 1, right, target)
         else:
             return binarySearch(arr, left, mid - 1, target)
-        print(arr[mid])
     else:
         return - 1
 
@@ -37,7 +36,6 @@ def insertionSort(arr):
         arr[j + 1] = key
     return arr
 
-# merge section
 def mergeSort(arr):
     if len(arr) <= 1:
         return arr
@@ -64,16 +62,24 @@ def merge(left, right):
         j += 1
     return result
 
-# Mapping สถานะกับ Emoji
+# ==========================================
+# ส่วนที่ 2: ตั้งค่าข้อมูลและฟอนต์
+# ==========================================
+try:
+    fe = fm.FontEntry(fname="./Kanit-Regular.ttf", name='Kanit')
+    fm.fontManager.ttflist.insert(0, fe)
+    plt.rcParams['font.family'] = fe.name
+except Exception:
+    pass 
+
 STATUS_OPTIONS = {
-    "Pending": "✅ Pending",
-    "In Transit": "🚚 In Transit",
-    "Delivered": "📦 Delivered"
+    "Pending": "⏳ รอจัดส่ง (Pending)",
+    "In Transit": "🚚 กำลังขนส่ง (In Transit)",
+    "Delivered": "✅ สำเร็จ (Delivered)"
 }
 
-# ==========================================
-# ส่วนที่ 2: ตั้งค่าข้อมูลและกราฟ
-# ==========================================
+PARCEL_TYPES = ["📦 พัสดุมาตรฐาน", "📄 เอกสารสำคัญ", "🍷 แตกหักง่าย", "🛋️ สินค้าชิ้นใหญ่"]
+
 if 'parcels_db' not in st.session_state:
     st.session_state.parcels_db = {}
 if 'tracking_list' not in st.session_state:
@@ -94,209 +100,184 @@ G.add_weighted_edges_from([
 BASE_FARE = 30
 RATE_PER_KM = 5
 
+# --- ฟังก์ชัน Callback สำหรับกดปุ่มเปลี่ยนสถานะ (ทำงานก่อนหน้าจอโหลด) ---
+def mark_as_delivered(tid):
+    st.session_state.parcels_db[tid]["status"] = "Delivered"
+    # บังคับอัปเดตค่าของ Dropdown ใน Tab 1 ให้ตรงกันล่วงหน้า
+    st.session_state[f"status_{tid}"] = STATUS_OPTIONS["Delivered"]
+
 # ==========================================
 # ส่วนที่ 3: UI ของ Streamlit
 # ==========================================
-st.set_page_config(layout="wide")
-st.title("📦 Smart Logistics & Routing System (ภาคกลางนะจ๊ะ)")
+st.set_page_config(page_title="Smart Logistics", layout="wide", initial_sidebar_state="collapsed")
+st.title("📦 Smart Logistics & Routing System")
+st.markdown("ระบบจัดการคลังสินค้าและคำนวณเส้นทางจัดส่งอัจฉริยะ")
 
-tab1, tab2 = st.tabs(["📋 จัดการรายการพัสดุ", "📍 คำนวณเส้นทาง (Dijkstra)"])
+tab1, tab2, tab3 = st.tabs(["📋 จัดการรายการพัสดุ", "📍 คำนวณเส้นทาง (Routing)", "📊 แดชบอร์ดสรุปผล"])
 
-# --- TAB 1: Management & List (Merged) ---
+# -----------------------------------------------------------------------------
+# TAB 1: จัดการรายการพัสดุ
+# -----------------------------------------------------------------------------
 with tab1:
-    # 1. ส่วนการเพิ่มข้อมูล (Hidden by default using Expander)
-    with st.expander("➕ เพิ่มพัสดุใหม่ (Click to expand)"):
+    with st.expander("➕ เพิ่มพัสดุใหม่เข้าสู่ระบบ", expanded=False):
         col1, col2, col3 = st.columns(3)
+        co1, co2 = st.columns(2)
         with col1:
             new_tid = st.number_input("Tracking ID", min_value=1, step=1, key="new_tid")
             new_name = st.text_input("ชื่อผู้รับ", key="new_name")
         with col2:
+            new_type = st.selectbox("ประเภทพัสดุ", PARCEL_TYPES)
+        with col3:
             new_origin = st.selectbox("ต้นทาง", list(G.nodes()), key="new_org")
             new_dest = st.selectbox("ปลายทาง", list(G.nodes()), key="new_dest")
-        with col3:
-            st.write("##")
-            if st.button("บันทึกพัสดุ", use_container_width=True):
+        with co1:
+            if st.button("💾 บันทึกพัสดุ", use_container_width=True, type="primary"):
                 if new_tid not in st.session_state.parcels_db and new_name:
                     try:
                         dist = nx.dijkstra_path_length(G, new_origin, new_dest, weight='weight')
                         cost = BASE_FARE + (dist * RATE_PER_KM)
                         st.session_state.parcels_db[new_tid] = {
-                            "name": new_name, "origin": new_origin, "dest": new_dest,
+                            "name": new_name, "type": new_type, "origin": new_origin, "dest": new_dest,
                             "status": "Pending", "dist": dist, "cost": cost
                         }
                         st.session_state.tracking_list.append(new_tid)
                         st.session_state.name_list.append(new_name)
                         st.success(f"เพิ่มรหัส {new_tid} สำเร็จ!")
-                        # st.rerun()
-                    except:
+                    except Exception:
                         st.error("ไม่มีเส้นทางเชื่อมต่อกัน")
                 else:
-                    st.error("ข้อมูลไม่ถูกต้องหรือ ID ซ้ำ")
+                    st.error("ข้อมูลไม่ครบถ้วนหรือรหัสซ้ำ!")
+
 
     st.divider()
 
-    # 2. ส่วนการค้นหา (Filter)
-    search_query = st.text_input("🔍 ค้นหาพัสดุ (ระบุชื่อผู้รับหรือ Tracking ID)")
+    st.subheader("🔍 ค้นหาและจัดการพัสดุ")
+    f_col1, f_col2 = st.columns([1, 1])
+    search_query = f_col1.text_input("ค้นหา (ระบุชื่อผู้รับหรือ Tracking ID)")
+    filter_types = f_col2.multiselect("🏷️ กรองตามประเภทพัสดุ", PARCEL_TYPES, default=PARCEL_TYPES)
 
-    # ---------------------------------------------------------
-    # การจัดเรียง (Sorting) ให้ตรงกับขอบเขตข้อ 3
-    # ---------------------------------------------------------
-    # สร้าง List จำลองเพื่อนำมาจัดเรียง โดยดึงจาก tracking_list
     sorted_tracking = st.session_state.tracking_list.copy()
-
     if len(sorted_tracking) > 0:
         if len(sorted_tracking) < 43:
-            # ข้อมูลน้อยใช้ Insertion Sort
             sorted_tracking = insertionSort(sorted_tracking)
-            st.caption("ℹ️ แสดงผลโดยจัดเรียงรหัสด้วย Insertion Sort")
+            st.caption("ℹ️ แสดงผลโดยจัดเรียงรหัสด้วย *Insertion Sort*")
         else:
-            # ข้อมูลมากใช้ Merge Sort
             sorted_tracking = mergeSort(sorted_tracking)
-            st.caption("ℹ️ แสดงผลโดยจัดเรียงรหัสด้วย Merge Sort")
+            st.caption("ℹ️ แสดงผลโดยจัดเรียงรหัสด้วย *Merge Sort*")
 
-    # 3. การแสดงผลตารางรายการพัสดุ
-    st.subheader("รายการพัสดุทั้งหมด")
-
-    # ส่วนหัวตาราง
-    h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([1, 2, 2, 1.8, 1, 1])
-    h_col1.write("**ID**")
-    h_col2.write("**ชื่อผู้รับ**")
-    h_col3.write("**เส้นทาง**")
-    h_col4.write("**สถานะ**")
-    h_col5.write("**ราคา**")
-    h_col6.write("**จัดการ**")
-
-    # ---------------------------------------------------------
-    # การค้นหา (Searching) ให้ตรงกับขอบเขตข้อ 4
-    # ---------------------------------------------------------
-    display_list = sorted_tracking # ตั้งต้นด้วยข้อมูลที่จัดเรียงแล้ว
-
+    display_list = sorted_tracking
     if search_query:
         if search_query.isdigit():
-            # ถ้าพิมพ์ตัวเลข -> ค้นหาด้วย Binary Search
             target_id = int(search_query)
-            # Binary Search บังคับว่าข้อมูลต้อง Sort ก่อน ซึ่งเรา Sort ไว้แล้วด้านบน
             idx = binarySearch(sorted_tracking, 0, len(sorted_tracking) - 1, target_id)
-
-            if idx != -1:
-                display_list = [sorted_tracking[idx]] # เจอข้อมูล
-            else:
-                display_list = [] # ไม่เจอข้อมูล
+            display_list = [sorted_tracking[idx]] if idx != -1 else []
         else:
-            # ถ้าพิมพ์ตัวหนังสือ -> ค้นหาชื่อด้วย Sequential Search (fuzzyLinearSearch)
             indices = fuzzyLinearSearch(st.session_state.name_list, search_query)
-            # ดึง ID ออกมาจากตำแหน่ง Index ที่ค้นหาเจอ
             display_list = [st.session_state.tracking_list[i] for i in indices]
 
-    # วนลูปสร้างแถวในตาราง
-    for tid in display_list:
-        data = st.session_state.parcels_db[tid]
-        r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([1, 2, 2, 1.8, 1, 1])
+    st.markdown("---")
+    h_col1, h_col2, h_col3, h_col4, h_col5, h_col6, h_col7 = st.columns([0.8, 1.2, 1.2, 1.8, 1.5, 1, 0.8])
+    h_col1.write("**ID**")
+    h_col2.write("**ชื่อผู้รับ**")
+    h_col3.write("**ประเภท**")
+    h_col4.write("**เส้นทาง**")
+    h_col5.write("**สถานะ**")
+    h_col6.write("**ราคา**")
+    h_col7.write("**จัดการ**")
 
+    count_displayed = 0
+    for tid in display_list:
+        data = st.session_state.parcels_db.get(tid)
+        if not data: continue
+        
+        p_type = data.get("type", "📦 พัสดุมาตรฐาน")
+        if p_type not in filter_types: continue 
+
+        count_displayed += 1
+        r_col1, r_col2, r_col3, r_col4, r_col5, r_col6, r_col7 = st.columns([0.8, 1.2, 1.2, 1.8, 1.5, 1, 0.8])
         r_col1.write(f"`{tid}`")
         r_col2.write(data["name"])
-        r_col3.write(f"{data['origin']} ➔ {data['dest']}")
+        r_col3.write(p_type)
+        r_col4.write(f"{data['origin']} ➔ {data['dest']}")
 
         current_status_val = data["status"]
         status_list = list(STATUS_OPTIONS.keys())
         status_labels = list(STATUS_OPTIONS.values())
 
-        new_status_label = r_col4.selectbox(
-            "",
-            status_labels,
-            index=status_list.index(current_status_val),
-            key=f"status_{tid}",
-            label_visibility="collapsed"
+        new_status_label = r_col5.selectbox(
+            "", status_labels, index=status_list.index(current_status_val),
+            key=f"status_{tid}", label_visibility="collapsed"
         )
-
-        # ดึง Key กลับมาจาก Label (เช่น "✅ Pending" -> "Pending")
         new_status_key = [k for k, v in STATUS_OPTIONS.items() if v == new_status_label][0]
 
         if new_status_key != current_status_val:
             st.session_state.parcels_db[tid]["status"] = new_status_key
             st.rerun()
 
-        r_col5.write(f"{data['cost']}.-")
+        r_col6.write(f"฿{data['cost']}")
 
-        if r_col6.button("🗑️ ลบ", key=f"del_{tid}", type="secondary"):
+        if r_col7.button("🗑️", key=f"del_{tid}", help="ลบพัสดุ"):
             name_to_rem = data["name"]
             del st.session_state.parcels_db[tid]
             st.session_state.tracking_list.remove(tid)
             st.session_state.name_list.remove(name_to_rem)
             st.rerun()
+            
+    if count_displayed == 0:
+        st.info("ไม่พบรายการพัสดุที่ตรงกับเงื่อนไข")
 
-# --- TAB 2: Dijkstra Routing ---
+# -----------------------------------------------------------------------------
+# TAB 2: คำนวณเส้นทางและอุปสรรค
+# -----------------------------------------------------------------------------
 with tab2:
-    st.subheader("📍 คำนวณเส้นทางสำหรับพัสดุที่กำลังขนส่ง")
+    st.subheader("🗺️ จำลองเส้นทางและคำนวณการจัดส่ง")
 
-    # 1. กรองเฉพาะรายการพัสดุที่เป็น "In Transit"
-    in_transit_list = {
-        tid: data for tid, data in st.session_state.parcels_db.items()
-        if data["status"] == "In Transit"
-    }
+    in_transit_list = {tid: d for tid, d in st.session_state.parcels_db.items() if d["status"] == "In Transit"}
 
     if not in_transit_list:
-        st.warning("⚠️ ไม่มีพัสดุที่มีสถานะ 'In Transit' ในระบบขณะนี้")
+        st.warning("⚠️ ไม่มีพัสดุสถานะ 'In Transit' กรุณาเปลี่ยนสถานะพัสดุในหน้าแรกก่อน")
     else:
-        # 2. ให้เลือกพัสดุ (แสดงผลทั้ง ID และชื่อผู้รับ)
-        parcel_options = [
-            f"{tid} - ผู้รับ: {data['name']} ({data['origin']} ➔ {data['dest']})"
-            for tid, data in in_transit_list.items()
-        ]
-
-        selected_option = st.selectbox(
-            "เลือกพัสดุที่ต้องการดูเส้นทาง (พิมพ์เพื่อค้นหา ID หรือชื่อ)",
-            options=parcel_options
-        )
-
-        # ดึง ID กลับมาจากข้อความที่เลือก
+        parcel_options = [f"{tid} - {d['name']} ({d['origin']} ➔ {d['dest']})" for tid, d in in_transit_list.items()]
+        col_sel, col_btn = st.columns([3, 1])
+        selected_option = col_sel.selectbox("พัสดุที่กำลังจัดส่ง:", options=parcel_options, label_visibility="collapsed")
+        
         selected_tid = int(selected_option.split(" - ")[0])
         parcel_data = in_transit_list[selected_tid]
 
-        # ---------------------------------------------------------
-        # ฟีเจอร์ใหม่: ระบบจำลองอุปสรรคเส้นทาง (Dynamic Road Condition)
-        # ---------------------------------------------------------
-        st.divider()
-        st.markdown("#### 🚧 ระบบจำลองอุปสรรคเส้นทาง")
-        
-        # ดึงรายชื่อเส้นทางทั้งหมดมาทำเป็นตัวเลือก
-        all_edges = [f"{u} - {v}" for u, v in G.edges()]
-        closed_roads = st.multiselect(
-            "เลือกเส้นทางที่ 'ปิดซ่อมแซม' หรือ 'รถติดหนัก' (Algorithm จะคำนวณทางเลี่ยงให้โดยอัตโนมัติ):",
-            options=all_edges
+        # ✅ แก้ไขตรงนี้: ใช้ on_click เพื่อรันฟังก์ชันอัปเดตก่อนการโหลดหน้าจอ
+        col_btn.button(
+            "✅ ขนส่งสำเร็จ", 
+            key=f"btn_success_{selected_tid}", 
+            type="primary", 
+            use_container_width=True,
+            on_click=mark_as_delivered, # เรียกใช้ Callback ทันทีเมื่อปุ่มถูกกด
+            args=(selected_tid,)      # ส่งรหัสไปให้ฟังก์ชัน
         )
 
-        # 3. ปุ่มคำนวณเส้นทาง
-        if st.button(f"🚀 คำนวณเส้นทางของรหัส {selected_tid}"):
-            try:
-                s_node = parcel_data["origin"]
-                e_node = parcel_data["dest"]
+        st.markdown("##### 🚧 จำลองอุปสรรคบนท้องถนน")
+        all_edges = [f"{u} - {v}" for u, v in G.edges()]
+        closed_roads = st.multiselect(
+            "เลือกเส้นทางที่ 'ถนนปิด' หรือ 'รถติดหนัก' (ระบบจะหาทางเลี่ยงอัตโนมัติ):", options=all_edges
+        )
 
-                # ---- Logic ตัดเส้นทาง ----
-                G_temp = G.copy() # สร้าง Graph สำเนา
+        if st.button(f"🚀 คำนวณเส้นทางใหม่", use_container_width=True):
+            try:
+                s_node, e_node = parcel_data["origin"], parcel_data["dest"]
+                G_temp = G.copy()
                 for road in closed_roads:
                     u, v = road.split(" - ")
-                    if G_temp.has_edge(u, v):
-                        G_temp.remove_edge(u, v) # ลบเส้นทางที่ปิดออกชั่วคราว
+                    if G_temp.has_edge(u, v): G_temp.remove_edge(u, v)
 
-                # คำนวณโดยใช้ G_temp ที่ถูกลบเส้นทางที่มีปัญหาออกไปแล้ว
                 path = nx.dijkstra_path(G_temp, source=s_node, target=e_node, weight='weight')
                 dist = nx.dijkstra_path_length(G_temp, source=s_node, target=e_node, weight='weight')
 
-                # แสดงข้อมูลพัสดุและผลการคำนวณ
-                st.success(f"📦 ข้อมูลพัสดุ: คุณ {parcel_data['name']} | สถานะ: 🚚 In Transit")
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric("ระยะทาง", f"{dist} กม.")
-                m2.metric("ราคาขนส่ง", f"{parcel_data['cost']} บาท")
-                m3.metric("จุดแวะพัก", f"{len(path)} สถานี")
-
-                if closed_roads:
-                    st.warning(f"⚠️ มีการหลีกเลี่ยงเส้นทางที่ปิด: {', '.join(closed_roads)}")
-                st.info(f"🚩 เส้นทาง: {' ➔ '.join(path)}")
+                st.success(f"📦 พัสดุรหัส {selected_tid} | ผู้รับ: {parcel_data['name']} | 🚩 เส้นทาง: {' ➔ '.join(path)}")
 
                 # --- การวาดกราฟ Kamada-Kawai ---
-                fig, ax = plt.subplots(figsize=(14, 10))
+
+                # [Image of Dijkstra's algorithm]
+
+                fig, ax = plt.subplots(figsize=(12, 8))
 
                 # จัดการฟอนต์
                 font_name = "sans-serif"
@@ -308,26 +289,18 @@ with tab2:
                     font_name = fe.name
                 except: pass
 
-                # คำนวณ Layout จากกราฟหลัก (G) เพื่อให้ตำแหน่ง Node ไม่เคลื่อนย้ายไปมา
-                pos = nx.kamada_kawai_layout(G, weight='weight', scale=4)
+                pos = nx.kamada_kawai_layout(G, weight='weight', scale=2)
 
-                # วาดองค์ประกอบกราฟ (Node สีน้ำเงิน, เส้นปกติสีเทา)
+                # วาดองค์ประกอบกราฟ
                 nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='#0066cc', alpha=0.9, ax=ax)
                 nx.draw_networkx_edges(G, pos, width=1.5, alpha=0.15, edge_color='grey',
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
-                # วาดเส้นทางที่ถูกปิด (ถ้ามี) ให้เป็น "สีดำเส้นประ" 
-                if closed_roads:
-                    closed_edge_list = [(r.split(" - ")[0], r.split(" - ")[1]) for r in closed_roads]
-                    nx.draw_networkx_edges(G, pos, edgelist=closed_edge_list, width=3, edge_color='black',
-                                           style='dashed', min_source_margin=35, min_target_margin=35, ax=ax)
-
-                # ไฮไลต์เส้นทางพัสดุชิ้นนี้ (จาก G_temp) เป็นเส้นหนาสีแดง
+                # ไฮไลต์เส้นทางพัสดุชิ้นนี้
                 path_edges = list(zip(path, path[1:]))
                 nx.draw_networkx_edges(G, pos, edgelist=path_edges, width=8, edge_color='#ff3333',
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
-                # วาดป้ายกำกับชื่อ Node และ Weight
                 nx.draw_networkx_labels(G, pos, font_size=10, font_family=font_name,
                                         font_weight='bold', font_color='Black', ax=ax)
 
@@ -338,8 +311,58 @@ with tab2:
                 plt.axis('off')
                 st.pyplot(fig)
 
-            except nx.NetworkXNoPath:
-                # ดักจับ Error ในกรณีที่ผู้ใช้กดปิดถนนทุกเส้นจนไม่มีทางไปได้เลย
-                st.error("❌ ไม่สามารถคำนวณเส้นทางได้: เส้นทางถูกปิดล้อมทั้งหมดจนไม่สามารถเดินทางไปยังปลายทางได้")
             except Exception as e:
-                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+                st.error(f"❌ ไม่สามารถคำนวณเส้นทางได้: {e}")
+
+# -----------------------------------------------------------------------------
+# TAB 3: แดชบอร์ดสรุปผล 
+# -----------------------------------------------------------------------------
+with tab3:
+    st.subheader("📊 ภาพรวมคลังสินค้าและการจัดส่ง")
+    
+    all_p = list(st.session_state.parcels_db.values())
+    total_parcels = len(all_p)
+    
+    if total_parcels == 0:
+        st.info("ยังไม่มีข้อมูลพัสดุในระบบสำหรับวิเคราะห์")
+    else:
+        df = pd.DataFrame(all_p)
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📦 พัสดุทั้งหมด", f"{total_parcels} ชิ้น")
+        m2.metric("✅ ส่งสำเร็จ", f"{len(df[df['status'] == 'Delivered'])} ชิ้น")
+        m3.metric("🚚 กำลังจัดส่ง", f"{len(df[df['status'] == 'In Transit'])} ชิ้น")
+        m4.metric("💸 รายได้ทั้งหมด (บาท)", f"฿{df['cost'].sum():,.2f}")
+        
+        st.markdown("---")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**พัสดุที่ส่งสำเร็จแยกตามประเภท**")
+            delivered_df = df[df['status'] == 'Delivered']
+            if not delivered_df.empty:
+                type_counts = delivered_df['type'].value_counts()
+                
+                fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
+                ax_bar.bar(type_counts.index, type_counts.values, color="#4facfe")
+                ax_bar.set_ylabel("จำนวน (ชิ้น)", fontsize=10)
+                plt.xticks(rotation=15, fontsize=10)
+                st.pyplot(fig_bar)
+            else:
+                st.write("ยังไม่มีพัสดุที่ส่งสำเร็จ")
+                
+        with c2:
+            st.markdown("**สัดส่วนสถานะพัสดุทั้งหมด**")
+            status_counts = df['status'].value_counts()
+            
+            fig_pie, ax_pie = plt.subplots(figsize=(6, 4))
+            
+            thai_labels = [STATUS_OPTIONS.get(k, k).split(" ")[1] for k in status_counts.index]
+            colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99']
+            
+            ax_pie.pie(status_counts.values, labels=thai_labels, autopct='%1.1f%%', 
+                       startangle=90, colors=colors[:len(status_counts)], textprops={'fontsize': 10})
+            ax_pie.axis('equal')  
+            st.pyplot(fig_pie)
+            
+        st.caption("แดชบอร์ดอัปเดตข้อมูลแบบ Real-time ตามสถานะจริงในระบบ")
