@@ -98,7 +98,7 @@ RATE_PER_KM = 5
 # ส่วนที่ 3: UI ของ Streamlit
 # ==========================================
 st.set_page_config(layout="wide")
-st.title("📦 Smart Logistics & Routing System")
+st.title("📦 Smart Logistics & Routing System (ภาคกลางนะจ๊ะ)")
 
 tab1, tab2 = st.tabs(["📋 จัดการรายการพัสดุ", "📍 คำนวณเส้นทาง (Dijkstra)"])
 
