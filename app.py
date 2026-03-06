@@ -143,7 +143,7 @@ with tab1:
     # ---------------------------------------------------------
     # สร้าง List จำลองเพื่อนำมาจัดเรียง โดยดึงจาก tracking_list
     sorted_tracking = st.session_state.tracking_list.copy()
-    
+
     if len(sorted_tracking) > 0:
         if len(sorted_tracking) < 43:
             # ข้อมูลน้อยใช้ Insertion Sort
@@ -170,14 +170,14 @@ with tab1:
     # การค้นหา (Searching) ให้ตรงกับขอบเขตข้อ 4
     # ---------------------------------------------------------
     display_list = sorted_tracking # ตั้งต้นด้วยข้อมูลที่จัดเรียงแล้ว
-    
+
     if search_query:
         if search_query.isdigit():
             # ถ้าพิมพ์ตัวเลข -> ค้นหาด้วย Binary Search
             target_id = int(search_query)
             # Binary Search บังคับว่าข้อมูลต้อง Sort ก่อน ซึ่งเรา Sort ไว้แล้วด้านบน
             idx = binarySearch(sorted_tracking, 0, len(sorted_tracking) - 1, target_id)
-            
+
             if idx != -1:
                 display_list = [sorted_tracking[idx]] # เจอข้อมูล
             else:
@@ -197,7 +197,6 @@ with tab1:
         r_col2.write(data["name"])
         r_col3.write(f"{data['origin']} ➔ {data['dest']}")
 
-        # อัปเดตสถานะแบบ Inline พร้อมสติ๊กเกอร์
         current_status_val = data["status"]
         status_list = list(STATUS_OPTIONS.keys())
         status_labels = list(STATUS_OPTIONS.values())
@@ -250,9 +249,22 @@ with tab2:
             options=parcel_options
         )
 
-        # ดึง ID กลับมาจากข้อความที่เลือก (Split เอาส่วนแรกที่เป็น ID)
+        # ดึง ID กลับมาจากข้อความที่เลือก
         selected_tid = int(selected_option.split(" - ")[0])
         parcel_data = in_transit_list[selected_tid]
+
+        # ---------------------------------------------------------
+        # ฟีเจอร์ใหม่: ระบบจำลองอุปสรรคเส้นทาง (Dynamic Road Condition)
+        # ---------------------------------------------------------
+        st.divider()
+        st.markdown("#### 🚧 ระบบจำลองอุปสรรคเส้นทาง")
+        
+        # ดึงรายชื่อเส้นทางทั้งหมดมาทำเป็นตัวเลือก
+        all_edges = [f"{u} - {v}" for u, v in G.edges()]
+        closed_roads = st.multiselect(
+            "เลือกเส้นทางที่ 'ปิดซ่อมแซม' หรือ 'รถติดหนัก' (Algorithm จะคำนวณทางเลี่ยงให้โดยอัตโนมัติ):",
+            options=all_edges
+        )
 
         # 3. ปุ่มคำนวณเส้นทาง
         if st.button(f"🚀 คำนวณเส้นทางของรหัส {selected_tid}"):
@@ -260,8 +272,16 @@ with tab2:
                 s_node = parcel_data["origin"]
                 e_node = parcel_data["dest"]
 
-                path = nx.dijkstra_path(G, source=s_node, target=e_node, weight='weight')
-                dist = nx.dijkstra_path_length(G, source=s_node, target=e_node, weight='weight')
+                # ---- Logic ตัดเส้นทาง ----
+                G_temp = G.copy() # สร้าง Graph สำเนา
+                for road in closed_roads:
+                    u, v = road.split(" - ")
+                    if G_temp.has_edge(u, v):
+                        G_temp.remove_edge(u, v) # ลบเส้นทางที่ปิดออกชั่วคราว
+
+                # คำนวณโดยใช้ G_temp ที่ถูกลบเส้นทางที่มีปัญหาออกไปแล้ว
+                path = nx.dijkstra_path(G_temp, source=s_node, target=e_node, weight='weight')
+                dist = nx.dijkstra_path_length(G_temp, source=s_node, target=e_node, weight='weight')
 
                 # แสดงข้อมูลพัสดุและผลการคำนวณ
                 st.success(f"📦 ข้อมูลพัสดุ: คุณ {parcel_data['name']} | สถานะ: 🚚 In Transit")
@@ -271,13 +291,11 @@ with tab2:
                 m2.metric("ราคาขนส่ง", f"{parcel_data['cost']} บาท")
                 m3.metric("จุดแวะพัก", f"{len(path)} สถานี")
 
+                if closed_roads:
+                    st.warning(f"⚠️ มีการหลีกเลี่ยงเส้นทางที่ปิด: {', '.join(closed_roads)}")
                 st.info(f"🚩 เส้นทาง: {' ➔ '.join(path)}")
 
                 # --- การวาดกราฟ Kamada-Kawai ---
-
-
-                # [Image of Dijkstra's algorithm]
-
                 fig, ax = plt.subplots(figsize=(14, 10))
 
                 # จัดการฟอนต์
@@ -290,18 +308,26 @@ with tab2:
                     font_name = fe.name
                 except: pass
 
+                # คำนวณ Layout จากกราฟหลัก (G) เพื่อให้ตำแหน่ง Node ไม่เคลื่อนย้ายไปมา
                 pos = nx.kamada_kawai_layout(G, weight='weight', scale=4)
 
-                # วาดองค์ประกอบกราฟ
+                # วาดองค์ประกอบกราฟ (Node สีน้ำเงิน, เส้นปกติสีเทา)
                 nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='#0066cc', alpha=0.9, ax=ax)
                 nx.draw_networkx_edges(G, pos, width=1.5, alpha=0.15, edge_color='grey',
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
-                # ไฮไลต์เส้นทางพัสดุชิ้นนี้
+                # วาดเส้นทางที่ถูกปิด (ถ้ามี) ให้เป็น "สีดำเส้นประ" 
+                if closed_roads:
+                    closed_edge_list = [(r.split(" - ")[0], r.split(" - ")[1]) for r in closed_roads]
+                    nx.draw_networkx_edges(G, pos, edgelist=closed_edge_list, width=3, edge_color='black',
+                                           style='dashed', min_source_margin=35, min_target_margin=35, ax=ax)
+
+                # ไฮไลต์เส้นทางพัสดุชิ้นนี้ (จาก G_temp) เป็นเส้นหนาสีแดง
                 path_edges = list(zip(path, path[1:]))
                 nx.draw_networkx_edges(G, pos, edgelist=path_edges, width=8, edge_color='#ff3333',
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
+                # วาดป้ายกำกับชื่อ Node และ Weight
                 nx.draw_networkx_labels(G, pos, font_size=10, font_family=font_name,
                                         font_weight='bold', font_color='Black', ax=ax)
 
@@ -312,5 +338,8 @@ with tab2:
                 plt.axis('off')
                 st.pyplot(fig)
 
+            except nx.NetworkXNoPath:
+                # ดักจับ Error ในกรณีที่ผู้ใช้กดปิดถนนทุกเส้นจนไม่มีทางไปได้เลย
+                st.error("❌ ไม่สามารถคำนวณเส้นทางได้: เส้นทางถูกปิดล้อมทั้งหมดจนไม่สามารถเดินทางไปยังปลายทางได้")
             except Exception as e:
-                st.error(f"❌ ไม่สามารถคำนวณเส้นทางได้: {e}")
+                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
