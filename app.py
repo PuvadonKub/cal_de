@@ -289,7 +289,14 @@ with tab2:
                     font_name = fe.name
                 except: pass
 
-                pos = nx.kamada_kawai_layout(G, weight='weight', scale=2)
+                # 1. กำหนดกลุ่มจังหวัดวงใน (ศูนย์กลาง)
+                inner_shell = ["ปทุมธานี", "กรุงเทพ","นนทบุรี"]
+
+                # 2. ให้จังหวัดที่เหลือเด้งไปอยู่วงนอกอัตโนมัติ
+                outer_shell = [node for node in G.nodes() if node not in inner_shell]
+
+                # 3. วาดกราฟแบบ Shell
+                pos = nx.shell_layout(G, nlist=[inner_shell, outer_shell], scale=3)
 
                 # วาดองค์ประกอบกราฟ
                 nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='#0066cc', alpha=0.9, ax=ax)
