@@ -289,17 +289,26 @@ with tab2:
                     font_name = fe.name
                 except: pass
 
-                # 1. กำหนดกลุ่มจังหวัดวงใน (ศูนย์กลาง)
+                # กำหนดกลุ่มจังหวัดวงใน (ศูนย์กลาง)
                 inner_shell = ["ปทุมธานี", "กรุงเทพ","นนทบุรี"]
-
-                # ใส่ชื่อจังหวัดเรียงตามลำดับที่คุณอยากให้อยู่บนวงกลม (ตามเข็มนาฬิกา)
+                # วงนอกนะจ๊ะ
                 outer_shell = ["สมุทรปราการ", "สมุทรสาคร", "นครปฐม", "สระบุรี", "พระนครศรีอยุธยา", "นครนายก"]
 
                 # 3. วาดกราฟแบบ Shell
                 pos = nx.shell_layout(G, nlist=[inner_shell, outer_shell], scale=3)
 
-                # วาดองค์ประกอบกราฟ
-                nx.draw_networkx_nodes(G, pos, node_size=2000, node_color='#0066cc', alpha=0.9, ax=ax)
+                # สร้าง List เพื่อแยกสีจุดเริ่มต้นและปลายทาง
+                color_map = []
+                for node in G.nodes():
+                    if node == s_node:
+                        color_map.append('#28a745') # สีเขียว (จุดเริ่มต้น)
+                    elif node == e_node:
+                        color_map.append('#dc3545') # สีแดง (จุดปลายทาง)
+                    else:
+                        color_map.append('#0066cc') # สีน้ำเงิน (จังหวัดอื่นๆ)
+
+                # วาดองค์ประกอบกราฟ (แก้ alpha=1.0 เพื่อให้สีทึบ 100%)
+                nx.draw_networkx_nodes(G, pos, node_size=2000, node_color=color_map, alpha=1.0, ax=ax)
                 nx.draw_networkx_edges(G, pos, width=1.5, alpha=0.15, edge_color='grey',
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
@@ -309,7 +318,7 @@ with tab2:
                                        min_source_margin=35, min_target_margin=35, ax=ax)
 
                 nx.draw_networkx_labels(G, pos, font_size=10, font_family=font_name,
-                                        font_weight='bold', font_color='Black', ax=ax)
+                                        font_weight='bold', font_color='black', ax=ax)
 
                 edge_labels = nx.get_edge_attributes(G, 'weight')
                 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=10, font_family=font_name,
